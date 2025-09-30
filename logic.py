@@ -1,4 +1,4 @@
-from utils import errorMessages
+from utils import errorMessages, To_binary
 import re
 
 def testIP(ip, subnet):
@@ -29,7 +29,7 @@ def testIP(ip, subnet):
     class_info = detect_ip_class(ip)
     
     # If everything is valid, return success message with class info
-    return f"{errorMessages['valid_ip_subnet']} {class_info}"
+    return 0
 
 def validate_ip(ip):
     """Validates an IP address"""
@@ -62,16 +62,6 @@ def validate_ip(ip):
 
 def validate_subnet(subnet):
     """Validates a subnet mask"""
-    # Check if it's in CIDR notation
-    if subnet.startswith('/'):
-        cidr = subnet[1:]
-        if not cidr.isdigit():
-            return errorMessages["invalid_cidr_format"]
-        cidr_value = int(cidr)
-        if cidr_value < 0 or cidr_value > 32:
-            return errorMessages["invalid_cidr_range"]
-        return None
-    
     # Check general format for decimal notation
     if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', subnet):
         return errorMessages["invalid_subnet_format"]
@@ -107,37 +97,9 @@ def validate_subnet(subnet):
     return None
 
 def is_valid_subnet_pattern(octets):
-    """Checks if the mask has a valid bit pattern (consecutive 1s followed by 0s)"""
-    # Convert each octet to binary and concatenate
-    binary = ''.join(format(octet, '08b') for octet in octets)
+    binary = ''.join(To_binary(octet) for octet in octets)
     
-    # A valid subnet mask must follow the pattern: 1*0*
-    # This means all 1s must be consecutive at the beginning, followed by all 0s
-    # No holes (0s followed by 1s) are allowed
-    
-    # Method 1: Use regex to check the pattern
-    pattern = re.match(r'^1*0*$', binary)
-    if not pattern:
-        return False
-    
-    # Method 2: Additional verification - check for holes manually
-    # Once we find a 0, we should not find any 1s after it
-    found_zero = False
-    for bit in binary:
-        if bit == '0':
-            found_zero = True
-        elif bit == '1' and found_zero:
-            # Found a 1 after a 0 - this is a hole, invalid mask
-            return False
-    
-    # Method 3: Verify using arithmetic property
-    # A valid subnet mask in decimal should have the property that
-    # (mask + 1) & mask == 0, where mask is the 32-bit integer representation
     mask_int = int(binary, 2)
-    
-    # Special cases: all 0s and all 1s are handled separately
-    if mask_int == 0 or mask_int == 0xFFFFFFFF:
-        return True
     
     # Check if it's a valid contiguous mask
     # For a valid mask, mask + 1 should be a power of 2 when inverted
@@ -170,32 +132,3 @@ def detect_ip_class(ip):
         return errorMessages["class_e_detected"]
     else:
         return ""
-
-def test_subnet_masks():
-    """Test function to validate different subnet mask patterns"""
-    test_cases = [
-        # Valid masks
-        ("255.255.255.0", True),      # 11111111.11111111.11111111.00000000
-        ("255.255.240.0", True),      # 11111111.11111111.11110000.00000000
-        ("255.128.0.0", True),        # 11111111.10000000.00000000.00000000
-        ("255.255.255.252", True),    # 11111111.11111111.11111111.11111100
-        ("128.0.0.0", True),          # 10000000.00000000.00000000.00000000
-        
-        # Invalid masks (with holes)
-        ("255.255.15.255", False),    # 11111111.11111111.00001111.11111111 (hole)
-        ("255.127.255.0", False),     # 11111111.01111111.11111111.00000000 (hole)
-        ("240.255.255.0", False),     # 11110000.11111111.11111111.00000000 (hole)
-        ("255.255.255.129", False),   # 11111111.11111111.11111111.10000001 (hole)
-        ("255.254.255.0", False),     # 11111111.11111110.11111111.00000000 (hole)
-    ]
-    
-    print("Testing subnet mask validation:")
-    for mask, expected in test_cases:
-        octets = [int(x) for x in mask.split('.')]
-        result = is_valid_subnet_pattern(octets)
-        status = "✓" if result == expected else "✗"
-        binary = '.'.join(format(octet, '08b') for octet in octets)
-        print(f"{status} {mask} ({binary}) - Expected: {expected}, Got: {result}")
-
-# Uncomment the line below to run tests
-# test_subnet_masks()

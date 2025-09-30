@@ -19,13 +19,11 @@ errorMessages = {
     
     # Messages d'erreur pour le masque de sous-réseau
     "empty_subnet": "Le masque de sous-réseau ne peut pas être vide.",
-    "invalid_subnet_format": "Format de masque de sous-réseau invalide. Utilisez le format xxx.xxx.xxx.xxx ou /xx",
+    "invalid_subnet_format": "Format de masque de sous-réseau invalide. Utilisez le format xxx.xxx.xxx.xxx",
     "invalid_subnet_octets": "Un masque de sous-réseau doit contenir exactement 4 octets séparés par des points.",
     "invalid_subnet_range": "Chaque octet du masque doit être un nombre entre 0 et 255.",
     "invalid_subnet_number": "Chaque octet du masque doit être un nombre entier valide.",
     "invalid_subnet_pattern": "Le masque de sous-réseau doit être composé de bits consécutifs à 1 suivis de bits à 0.",
-    "invalid_cidr_range": "La notation CIDR doit être entre /0 et /32.",
-    "invalid_cidr_format": "Format CIDR invalide. Utilisez /xx où xx est un nombre entre 0 et 32.",
     "subnet_all_zeros": "Le masque de sous-réseau ne peut pas être 0.0.0.0.",
     "subnet_all_ones": "Le masque de sous-réseau ne peut pas être 255.255.255.255.",
     
