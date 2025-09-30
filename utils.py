@@ -1,7 +1,6 @@
 errorMessages = {
     # Messages d'erreur généraux
     "empty_input": "Les champs ne peuvent pas être vides.",
-    "invalid_format": "Le format de l'entrée est invalide.",
     
     # Messages d'erreur pour l'adresse IP
     "empty_ip": "L'adresse IP ne peut pas être vide.",
@@ -42,3 +41,13 @@ errorMessages = {
     "class_d_detected": "Adresse IP de classe D (multicast) détectée.",
     "class_e_detected": "Adresse IP de classe E (expérimentale) détectée.",
 }
+
+def To_binary(octet):    
+    binary = ''
+    for i in range(7, -1, -1):
+        if octet >= 2**i:
+            binary += '1'
+            octet -= 2**i
+        else:
+            binary += '0'
+    return binary
