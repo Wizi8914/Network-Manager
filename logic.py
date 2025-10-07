@@ -1,8 +1,7 @@
-from utils import errorMessages, To_binary
+from utils import errorMessages, informationMessages,To_binary
 import re
 
 def testIP(ip, subnet):
-    # Check if fields are empty
     if not ip and not subnet:
         return errorMessages["empty_input"]
     if not ip:
@@ -20,41 +19,27 @@ def testIP(ip, subnet):
     if subnet_error:
         return subnet_error
     
-    # IP/Subnet compatibility check
-    compatibility_error = validate_ip_subnet_compatibility(ip, subnet)
-    if compatibility_error:
-        return compatibility_error
-    
-    # IP class detection
-    class_info = detect_ip_class(ip)
-    
-    # If everything is valid, return success message with class info
     return 0
 
 def validate_ip(ip):
     """Validates an IP address"""
-    # Check general format
+
     if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip):
         return errorMessages["invalid_ip_format"]
     
-    # Split into octets
     ip_parts = ip.split('.')
     if len(ip_parts) != 4:
         return errorMessages["invalid_ip_octets"]
     
-    # Validate each octet
     for i, part in enumerate(ip_parts):
-        # Check for leading zeros
         if len(part) > 1 and part[0] == '0':
             return errorMessages["leading_zeros"]
         
-        # Check if it's a valid number
         try:
             octet = int(part)
         except ValueError:
             return errorMessages["invalid_octet_number"]
         
-        # Check range
         if octet < 0 or octet > 255:
             return errorMessages["invalid_octet_range"]
     
@@ -109,26 +94,19 @@ def is_valid_subnet_pattern(octets):
     inverted_mask = (~mask_int) & 0xFFFFFFFF
     return (inverted_mask & (inverted_mask + 1)) == 0
 
-def validate_ip_subnet_compatibility(ip, subnet):
-    """Checks compatibility between IP and mask"""
-    # This function could be extended for more advanced checks
-    # For now, we assume that if both are individually valid,
-    # they are compatible
-    return None
-
 def detect_ip_class(ip):
     """Detects the IP address class"""
     first_octet = int(ip.split('.')[0])
     
     if 1 <= first_octet <= 126:
-        return errorMessages["class_a_detected"]
+        return informationMessages["class_a_detected"]
     elif 128 <= first_octet <= 191:
-        return errorMessages["class_b_detected"]
+        return informationMessages["class_b_detected"]
     elif 192 <= first_octet <= 223:
-        return errorMessages["class_c_detected"]
+        return informationMessages["class_c_detected"]
     elif 224 <= first_octet <= 239:
-        return errorMessages["class_d_detected"]
+        return informationMessages["class_d_detected"]
     elif 240 <= first_octet <= 255:
-        return errorMessages["class_e_detected"]
+        return informationMessages["class_e_detected"]
     else:
         return ""

@@ -1,8 +1,7 @@
 errorMessages = {
-    # Messages d'erreur généraux
     "empty_input": "Les champs ne peuvent pas être vides.",
-    
-    # Messages d'erreur pour l'adresse IP
+
+    # IP Address error messages
     "empty_ip": "L'adresse IP ne peut pas être vide.",
     "invalid_ip_format": "Format d'adresse IP invalide. Utilisez le format xxx.xxx.xxx.xxx",
     "invalid_ip_octets": "Une adresse IP doit contenir exactement 4 octets séparés par des points.",
@@ -17,7 +16,7 @@ errorMessages = {
     "network_ip": "Cette adresse correspond à l'adresse réseau.",
     "broadcast_ip_network": "Cette adresse correspond à l'adresse de diffusion du réseau.",
     
-    # Messages d'erreur pour le masque de sous-réseau
+    # Subnet mask error messages
     "empty_subnet": "Le masque de sous-réseau ne peut pas être vide.",
     "invalid_subnet_format": "Format de masque de sous-réseau invalide. Utilisez le format xxx.xxx.xxx.xxx",
     "invalid_subnet_octets": "Un masque de sous-réseau doit contenir exactement 4 octets séparés par des points.",
@@ -26,12 +25,15 @@ errorMessages = {
     "invalid_subnet_pattern": "Le masque de sous-réseau doit être composé de bits consécutifs à 1 suivis de bits à 0.",
     "subnet_all_zeros": "Le masque de sous-réseau ne peut pas être 0.0.0.0.",
     "subnet_all_ones": "Le masque de sous-réseau ne peut pas être 255.255.255.255.",
-    
-    # Messages d'erreur de compatibilité IP/Masque
+
+    # IP/Subnet compatibility error messages
     "ip_subnet_mismatch": "L'adresse IP et le masque de sous-réseau ne sont pas compatibles.",
     "invalid_host_portion": "La partie hôte de l'adresse IP contient des bits non valides pour ce masque.",
-    
-    # Messages d'information
+
+
+}
+
+informationMessages = {
     "valid_ip_subnet": "Adresse IP et masque de sous-réseau valides.",
     "class_a_detected": "Adresse IP de classe A détectée.",
     "class_b_detected": "Adresse IP de classe B détectée.", 
