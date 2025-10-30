@@ -30,7 +30,13 @@ errorMessages = {
     "ip_subnet_mismatch": "L'adresse IP et le masque de sous-réseau ne sont pas compatibles.",
     "invalid_host_portion": "La partie hôte de l'adresse IP contient des bits non valides pour ce masque.",
 
-
+    # Classless (CIDR) error messages
+    "cidr_missing_slash": "En mode Classless, l'adresse IP doit inclure la notation CIDR (ex: 192.168.1.0/24).",
+    "cidr_slash_in_classful": "En mode Classful, l'adresse IP ne doit pas contenir de notation CIDR (/).",
+    "cidr_invalid_prefix": "Le préfixe CIDR doit être un nombre entre 0 et 32.",
+    "cidr_invalid_format": "Format CIDR invalide. Utilisez le format xxx.xxx.xxx.xxx/préfixe (ex: 192.168.1.0/24).",
+    "cidr_prefix_out_of_range": "Le préfixe CIDR doit être un nombre entre 0 et 32.",
+    "cidr_multiple_slashes": "L'adresse IP ne peut contenir qu'un seul '/' pour la notation CIDR."
 }
 
 informationMessages = {

@@ -1,9 +1,9 @@
 import customtkinter as ctk
-from logic import testIP, detect_ip_class
+from logic import testIP, detect_ip_class, cidr_to_subnet_mask, extract_ip_from_cidr
 import threading
 
-ctk.set_appearance_mode("dark")  # Dark / Light theme
-ctk.set_default_color_theme("blue") # Default color theme
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
 
 class App(ctk.CTk):
     isClassful = False
@@ -15,7 +15,7 @@ class App(ctk.CTk):
         self.setup_layout()
         
     def setup_window(self):
-        self.title("🌐 Network Manager")
+        self.title("Network Manager")
         self.geometry("750x1000")
         
         self.configure(fg_color=("#f8fafc", "#1a1a1a"))
@@ -32,10 +32,9 @@ class App(ctk.CTk):
     def create_widgets(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         
-        # Title
         self.title_label = ctk.CTkLabel(
             self.main_frame,
-            text="🌐 Network Managers",
+            text="Network Managers",
             font=ctk.CTkFont(family="Segoe UI", size=28, weight="bold"),
             text_color=("#1e293b", "#f1f5f9")
         )
@@ -72,7 +71,7 @@ class App(ctk.CTk):
         
         self.ip_entry = ctk.CTkEntry(
             self.input_card,
-            placeholder_text="Exemple: 192.168.1.1",
+            placeholder_text="Exemple: 192.168.1.1 (ou 192.168.1.0/24 en mode Classless)",
             font=ctk.CTkFont(family="Segoe UI", size=13),
             height=45,
             corner_radius=12,
@@ -229,8 +228,9 @@ class App(ctk.CTk):
         
         self.info_text = ctk.CTkLabel(
             self.info_card,
-            text="• Format IP accepté: xxx.xxx.xxx.xxx (0-255 pour chaque octet)\n"
-                 "• Format masque accepté: xxx.xxx.xxx.xxx (notation décimale)\n"
+            text="• Mode Classful: Format IP xxx.xxx.xxx.xxx + masque séparé\n"
+                 "• Mode Classless: Format CIDR xxx.xxx.xxx.xxx/préfixe (ex: 192.168.1.0/24)\n"
+                 "• Le préfixe CIDR doit être entre 0 et 32\n"
                  "• Le masque doit avoir des bits consécutifs (pas de trous)\n"
                  "• Les adresses privées et spéciales sont détectées automatiquement",
             font=ctk.CTkFont(family="Segoe UI", size=11),
@@ -364,7 +364,7 @@ class App(ctk.CTk):
         self.validation_subnet = subnet
         
         def validate_in_background():
-            result = testIP(ip, subnet)
+            result = testIP(ip, subnet, self.isClassful)
             self.validation_result = result
             
         thread = threading.Thread(target=validate_in_background)
@@ -398,8 +398,18 @@ class App(ctk.CTk):
             
     def show_network_info(self, ip, subnet):
         try:
-            ip_parts = [int(x) for x in ip.split('.')]
-            subnet_parts = [int(x) for x in subnet.split('.')]
+            clean_ip = ip
+            subnet_mask = subnet
+            cidr_prefix = None
+            
+            if self.isClassful and '/' in ip:
+                parts = ip.split('/')
+                clean_ip = parts[0]
+                cidr_prefix = int(parts[1])
+                subnet_mask = cidr_to_subnet_mask(cidr_prefix)
+            
+            ip_parts = [int(x) for x in clean_ip.split('.')]
+            subnet_parts = [int(x) for x in subnet_mask.split('.')]
             
             network_parts = [ip_parts[i] & subnet_parts[i] for i in range(4)]
             network_addr = '.'.join(map(str, network_parts))
@@ -410,11 +420,16 @@ class App(ctk.CTk):
             host_bits = sum(bin(255 - octet).count('1') for octet in subnet_parts)
             num_hosts = (2 ** host_bits) - 2 if host_bits > 1 else 0
             
-            self.network_label.configure(text=f"🌐 Adresse réseau: {network_addr}")
-            self.broadcast_label.configure(text=f"📡 Adresse broadcast: {broadcast_addr}")
-            self.hosts_label.configure(text=f"👥 Hôtes disponibles: {num_hosts}")
+            if cidr_prefix is not None:
+                self.network_label.configure(text=f"🌐 Adresse réseau: {network_addr}/{cidr_prefix}")
+                self.broadcast_label.configure(text=f"📡 Adresse broadcast: {broadcast_addr}")
+                self.hosts_label.configure(text=f"👥 Hôtes disponibles: {num_hosts} (Masque: {subnet_mask})")
+            else:
+                self.network_label.configure(text=f"🌐 Adresse réseau: {network_addr}")
+                self.broadcast_label.configure(text=f"📡 Adresse broadcast: {broadcast_addr}")
+                self.hosts_label.configure(text=f"👥 Hôtes disponibles: {num_hosts}")
             
-        except:
+        except Exception as e:
             self.network_label.configure(text="❌ Erreur de calcul réseau")
             self.broadcast_label.configure(text="")
             self.hosts_label.configure(text="")
@@ -422,15 +437,17 @@ class App(ctk.CTk):
             
     def classless_toggle(self):
         self.isClassful = not self.isClassful
-        print(self.isClassful)
         
+        if self.isClassful:
+            self.ip_entry.configure(placeholder_text="Exemple: 192.168.1.0/24 (notation CIDR requise)")
+        else:
+            self.ip_entry.configure(placeholder_text="Exemple: 192.168.1.1 (sans notation CIDR)")
+                
         self.subnet_entry.configure(
             state="normal" if not self.isClassful else "disabled",
             fg_color=("#f8fafc", "#2d2d2d") if not self.isClassful else ("#a6a6a6", "#1a1a1a"),
             border_color=("#d1d5db", "#4a4a4a") if not self.isClassful else ("#5e6063", "#323232"),
             placeholder_text_color=("#9ca3af", "#6b7280") if not self.isClassful else ("#54585e", "#363a42"),
             text_color=("#374151", "#d1d5db") if not self.isClassful else ("#7f7f7f", "#5a5a5a"),
-
-            
         )
         self.clear_results()
