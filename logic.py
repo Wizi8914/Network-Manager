@@ -28,89 +28,71 @@ def testIP(ip, subnet, isClassful):
     return 0
 
 def validate_ip(ip, isClassful):
+    # Valide le format de l'IP et extrait le préfixe CIDR si présent
+    # Retourne: (erreur, ip_nettoyée, préfixe_cidr)
     cidr_prefix = None
     clean_ip = ip
     
     if '/' in ip:
         if ip.count('/') > 1:
-            return errorMessages["cidr_multiple_slashes"],
+            return errorMessages["cidr_multiple_slashes"], None, None
         
         if not isClassful:
-            return errorMessages["cidr_slash_in_classful"],
+            return errorMessages["cidr_slash_in_classful"], None, None
         
         parts = ip.split('/')
         clean_ip = parts[0]
         prefix_str = parts[1]
         
         if not prefix_str:
-            return errorMessages["cidr_invalid_format"], 
+            return errorMessages["cidr_invalid_format"], None, None
         
         try:
             cidr_prefix = int(prefix_str)
         except ValueError:
-            return errorMessages["cidr_invalid_prefix"], 
+            return errorMessages["cidr_invalid_prefix"], None, None
         
         if cidr_prefix < 0 or cidr_prefix > 32:
-            return errorMessages["cidr_prefix_out_of_range"], 
+            return errorMessages["cidr_prefix_out_of_range"], None, None 
     else:
         if isClassful:
-            return errorMessages["cidr_missing_slash"], 
+            return errorMessages["cidr_missing_slash"], None, None
     
     if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', clean_ip):
-        return errorMessages["invalid_ip_format"], 
+        return errorMessages["invalid_ip_format"], None, None 
     
     ip_parts = clean_ip.split('.')
     if len(ip_parts) != 4:
-        return errorMessages["invalid_ip_octets"],
+        return errorMessages["invalid_ip_octets"], None, None
     
     for i, part in enumerate(ip_parts):
         if len(part) > 1 and part[0] == '0':
-            return errorMessages["leading_zeros"],
+            return errorMessages["leading_zeros"], None, None
         
         try:
             octet = int(part)
         except ValueError:
-            return errorMessages["invalid_octet_number"],
+            return errorMessages["invalid_octet_number"], None, None
         
         if octet < 0 or octet > 255:
-            return errorMessages["invalid_octet_range"],
+            return errorMessages["invalid_octet_range"], None, None
     
     return None, clean_ip, cidr_prefix
 
 
 def validate_ipv4_format(ip):
-    """Valide le format IPv4 (sans CIDR). Retourne None ou un message d'erreur."""
-    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip):
-        return errorMessages["invalid_ip_format"]
-
-    parts = ip.split('.')
-    if len(parts) != 4:
-        return errorMessages["invalid_ip_octets"]
-
-    for part in parts:
-        if len(part) > 1 and part[0] == '0':
-            return errorMessages["leading_zeros"]
-        try:
-            octet = int(part)
-        except ValueError:
-            return errorMessages["invalid_octet_number"]
-        if octet < 0 or octet > 255:
-            return errorMessages["invalid_octet_range"]
-
-    return None
+    error, _, _ = validate_ip(ip, isClassful=False)
+    return error
 
 
 def mask_to_dotted(mask_input):
-    """Accepte '/24', '24' ou '255.255.255.0' et retourne le masque en notation pointée ou (None, erreur)."""
     if not mask_input:
         return None, errorMessages["empty_subnet"]
 
     s = str(mask_input).strip()
-    # strip leading slash
     if s.startswith('/'):
         s = s.lstrip('/')
 
-    # si c'est juste un préfixe numérique
     if s.isdigit():
         try:
             prefix = int(s)
@@ -120,7 +102,6 @@ def mask_to_dotted(mask_input):
             return None, errorMessages["cidr_prefix_out_of_range"]
         return cidr_to_subnet_mask(prefix), None
 
-    # sinon, on suppose une notation pointée
     subnet_err = validate_subnet(s)
     if subnet_err:
         return None, subnet_err
@@ -128,18 +109,18 @@ def mask_to_dotted(mask_input):
 
 
 def parse_membership_inputs(ip, network, mask):
-    """Normalise et valide les champs fournis pour la vérification d'appartenance.
-    Retourne (clean_ip, network_addr, dotted_mask, None) ou (None, None, None, erreur)
-    """
+    # Normalise et valide les entrées de vérification d'appartenance réseau
+    # Gère plusieurs formats: IP seule, IP/CIDR, réseau/CIDR, masque séparé
+    # Retourne: (ip_propre, réseau_propre, masque_pointé, erreur)
     ip_raw = (ip or '').strip()
     network_raw = (network or '').strip()
     mask_raw = (mask or '').strip()
 
-    # Si l'IP est vide et le réseau vide => erreur
     if not ip_raw and not network_raw:
         return None, None, None, errorMessages["empty_input"]
 
-    # Gérer IP avec /CIDR
+    # Gérer IP avec notation CIDR (ex: 192.168.1.10/24)
+    # Extrait l'IP et le préfixe, puis convertit en masque pointé si nécessaire
     cidr_prefix = None
     ip_only = ip_raw
     if '/' in ip_raw:
@@ -153,7 +134,7 @@ def parse_membership_inputs(ip, network, mask):
             return None, None, None, errorMessages["cidr_invalid_prefix"]
         if cidr_prefix < 0 or cidr_prefix > 32:
             return None, None, None, errorMessages["cidr_prefix_out_of_range"]
-        # if a mask field is empty, use cidr
+        
         if not mask_raw:
             mask_dotted = cidr_to_subnet_mask(cidr_prefix)
         else:
@@ -163,21 +144,18 @@ def parse_membership_inputs(ip, network, mask):
     else:
         mask_dotted = None
 
-    # Validate IP format if present
     if ip_only:
         ip_err = validate_ipv4_format(ip_only)
         if ip_err:
             return None, None, None, ip_err
 
-    # If mask provided but not yet normalized
     if mask_dotted is None and mask_raw:
         mask_dotted, mask_err = mask_to_dotted(mask_raw)
         if mask_err:
             return None, None, None, mask_err
 
-    # If we still don't have a mask but network contains /prefix
+    # Extraire le masque depuis le réseau si format CIDR
     if not mask_dotted and '/' in network_raw:
-        # extract from network cidr
         try:
             net_ip, net_pref = network_raw.split('/')
             net_pref = int(net_pref)
@@ -186,13 +164,12 @@ def parse_membership_inputs(ip, network, mask):
         except Exception:
             return None, None, None, errorMessages["cidr_invalid_format"]
 
-    # If network provided, validate format
     if network_raw:
         net_err = validate_ipv4_format(network_raw)
         if net_err:
             return None, None, None, net_err
 
-    # If network absent but we have ip and mask, compute network
+    # Calculer le réseau si absent
     if not network_raw and ip_only and mask_dotted:
         try:
             network_calc = get_network_address(ip_only, mask_dotted)
@@ -200,7 +177,7 @@ def parse_membership_inputs(ip, network, mask):
         except Exception:
             return None, None, None, errorMessages["ip_subnet_mismatch"]
 
-    # If both ip and network and mask exist, ensure consistency
+    # Vérifier cohérence IP/réseau/masque
     if ip_only and network_raw and mask_dotted:
         try:
             network_from_ip = get_network_address(ip_only, mask_dotted)
@@ -208,6 +185,13 @@ def parse_membership_inputs(ip, network, mask):
                 return None, None, None, errorMessages["ip_subnet_mismatch"]
         except Exception:
             return None, None, None, errorMessages["ip_subnet_mismatch"]
+
+    # Vérifications finales : on doit avoir au minimum IP et masque
+    if not ip_only:
+        return None, None, None, errorMessages["empty_ip"]
+    
+    if not mask_dotted:
+        return None, None, None, errorMessages["empty_subnet"]
 
     return ip_only, network_raw, mask_dotted, None
 
@@ -242,24 +226,27 @@ def validate_subnet(subnet):
     return None
 
 def is_valid_subnet_pattern(octets):
+    # Vérifie que le masque suit le pattern binaire valide:
+    # Tous les bits à 1 doivent être contigus à gauche, suivis uniquement de bits à 0
+    # Ex: 11111111.11111111.11110000.00000000 ✓  mais pas 11111111.11110000.11111111.00000000 ✗
     binary = ''.join(To_binary(octet) for octet in octets)
     mask_int = int(binary, 2)
     inverted_mask = (~mask_int) & 0xFFFFFFFF
+    # Si l'inverse du masque +1 a un ET logique nul avec lui-même, le pattern est valide
     return (inverted_mask & (inverted_mask + 1)) == 0
 
 def cidr_to_subnet_mask(prefix):
     if prefix < 0 or prefix > 32:
         return None
     
+    # Crée un masque avec 'prefix' bits à 1 suivis de bits à 0
+    # Ex: prefix=24 → 11111111.11111111.11111111.00000000 → 255.255.255.0
     mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
     octets = [(mask_int >> (24 - i * 8)) & 0xFF for i in range(4)]
     return '.'.join(map(str, octets))
 
-def extract_ip_from_cidr(ip):
-    return ip.split('/')[0] if '/' in ip else ip
-
 def detect_ip_class(ip):
-    clean_ip = extract_ip_from_cidr(ip)
+    clean_ip = ip.split('/')[0] if '/' in ip else ip
     first_octet = int(clean_ip.split('.')[0])
     
     if 1 <= first_octet <= 126:
@@ -276,9 +263,10 @@ def detect_ip_class(ip):
         return ""
 
 
-# --- Fonctions de manipulation binaire et calcul réseau (déplacées depuis point2.py)
+# Calculs réseau (conversions binaires, adresses réseau/broadcast, plages)
 def ip_to_binary(ip):
-    """Convertit une adresse IP en une chaîne binaire de 32 bits."""
+    # Convertit une IP décimale en binaire (32 bits)
+    # Ex: 192.168.1.1 → '11000000101010000000000100000001'
     ip_parts = ip.split('.')
     binary_ip = ''
     for part in ip_parts:
@@ -288,7 +276,6 @@ def ip_to_binary(ip):
 
 
 def binary_to_ip(binary):
-    """Convertit une chaîne binaire (32 bits) en adresse IP dot-decimal."""
     ip_parts = []
     for i in range(0, 32, 8):
         octet = binary[i:i+8]
@@ -297,7 +284,8 @@ def binary_to_ip(binary):
 
 
 def get_network_address(ip, mask):
-    """Calcule l'adresse réseau en faisant un ET entre l'IP et le masque."""
+    # Calcule l'adresse réseau en appliquant un ET logique bit à bit entre IP et masque
+    # Efface tous les bits hôte (où le masque = 0), conserve uniquement la partie réseau
     ip_bin = ip_to_binary(ip)
     mask_bin = ip_to_binary(mask)
     network_bin = ''
@@ -310,7 +298,8 @@ def get_network_address(ip, mask):
 
 
 def get_broadcast_address(ip, mask):
-    """Calcule l'adresse de broadcast en mettant les bits hôte à 1."""
+    # Calcule l'adresse de broadcast en mettant tous les bits hôte à 1
+    # Conserve la partie réseau (bits où masque = 1), met à 1 tous les bits où masque = 0
     ip_bin = ip_to_binary(ip)
     mask_bin = ip_to_binary(mask)
     broadcast_bin = ''
@@ -323,17 +312,18 @@ def get_broadcast_address(ip, mask):
 
 
 def ip_in_network(ip, network_ip, mask):
-    """Retourne True si `ip` appartient au réseau défini par `network_ip` et `mask`."""
     ip_net = get_network_address(ip, mask)
     return ip_net == network_ip
 
 
 def get_ip_range(network_ip, mask):
-    """Retourne l'adresse IP de début et de fin (machines) du réseau."""
+    # Calcule la plage d'IPs utilisables pour les hôtes
+    # Exclut l'adresse réseau (première) et l'adresse broadcast (dernière)
     network_bin = ip_to_binary(network_ip)
     broadcast_ip = get_broadcast_address(network_ip, mask)
     broadcast_bin = ip_to_binary(broadcast_ip)
 
+    # +1 pour exclure l'adresse réseau, -1 pour exclure le broadcast
     start_int = int(network_bin, 2) + 1
     end_int = int(broadcast_bin, 2) - 1
 
