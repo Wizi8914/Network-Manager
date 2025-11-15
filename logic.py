@@ -1,62 +1,90 @@
 from utils import errorMessages, informationMessages,To_binary
 import re
 
-def testIP(ip, subnet):
+def testIP(ip, subnet, isClassful):
     if not ip and not subnet:
         return errorMessages["empty_input"]
     if not ip:
         return errorMessages["empty_ip"]
-    if not subnet:
-        return errorMessages["empty_subnet"]
     
-    # IP address validation
-    ip_error = validate_ip(ip)
+    if not isClassful:
+        if '/' in ip:
+            return errorMessages["cidr_slash_in_classful"]
+        if not subnet:
+            return errorMessages["empty_subnet"]
+    else:
+        if '/' not in ip:
+            return errorMessages["cidr_missing_slash"]
+    
+    ip_error, clean_ip, cidr_prefix = validate_ip(ip, isClassful)
     if ip_error:
         return ip_error
     
-    # Subnet mask validation
-    subnet_error = validate_subnet(subnet)
-    if subnet_error:
-        return subnet_error
+    if not isClassful and subnet:
+        subnet_error = validate_subnet(subnet)
+        if subnet_error:
+            return subnet_error
     
     return 0
 
-def validate_ip(ip):
-    """Validates an IP address"""
-
-    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip):
-        return errorMessages["invalid_ip_format"]
+def validate_ip(ip, isClassful):
+    cidr_prefix = None
+    clean_ip = ip
     
-    ip_parts = ip.split('.')
+    if '/' in ip:
+        if ip.count('/') > 1:
+            return errorMessages["cidr_multiple_slashes"],
+        
+        if not isClassful:
+            return errorMessages["cidr_slash_in_classful"],
+        
+        parts = ip.split('/')
+        clean_ip = parts[0]
+        prefix_str = parts[1]
+        
+        if not prefix_str:
+            return errorMessages["cidr_invalid_format"], 
+        
+        try:
+            cidr_prefix = int(prefix_str)
+        except ValueError:
+            return errorMessages["cidr_invalid_prefix"], 
+        
+        if cidr_prefix < 0 or cidr_prefix > 32:
+            return errorMessages["cidr_prefix_out_of_range"], 
+    else:
+        if isClassful:
+            return errorMessages["cidr_missing_slash"], 
+    
+    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', clean_ip):
+        return errorMessages["invalid_ip_format"], 
+    
+    ip_parts = clean_ip.split('.')
     if len(ip_parts) != 4:
-        return errorMessages["invalid_ip_octets"]
+        return errorMessages["invalid_ip_octets"],
     
     for i, part in enumerate(ip_parts):
         if len(part) > 1 and part[0] == '0':
-            return errorMessages["leading_zeros"]
+            return errorMessages["leading_zeros"],
         
         try:
             octet = int(part)
         except ValueError:
-            return errorMessages["invalid_octet_number"]
+            return errorMessages["invalid_octet_number"],
         
         if octet < 0 or octet > 255:
-            return errorMessages["invalid_octet_range"]
+            return errorMessages["invalid_octet_range"],
     
-    return None
+    return None, clean_ip, cidr_prefix
 
 def validate_subnet(subnet):
-    """Validates a subnet mask"""
-    # Check general format for decimal notation
     if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', subnet):
         return errorMessages["invalid_subnet_format"]
     
-    # Split into octets
     subnet_parts = subnet.split('.')
     if len(subnet_parts) != 4:
         return errorMessages["invalid_subnet_octets"]
     
-    # Validate each octet
     subnet_octets = []
     for part in subnet_parts:
         try:
@@ -69,13 +97,11 @@ def validate_subnet(subnet):
         
         subnet_octets.append(octet)
     
-    # Check special masks
     if subnet == "0.0.0.0":
         return errorMessages["subnet_all_zeros"]
     if subnet == "255.255.255.255":
         return errorMessages["subnet_all_ones"]
     
-    # Check bit pattern (valid mask)
     if not is_valid_subnet_pattern(subnet_octets):
         return errorMessages["invalid_subnet_pattern"]
     
@@ -83,20 +109,24 @@ def validate_subnet(subnet):
 
 def is_valid_subnet_pattern(octets):
     binary = ''.join(To_binary(octet) for octet in octets)
-    
     mask_int = int(binary, 2)
-    
-    # Check if it's a valid contiguous mask
-    # For a valid mask, mask + 1 should be a power of 2 when inverted
-    # Example: 255.255.240.0 = 11111111111111111111000000000000
-    # Inverted: 00000000000000000000111111111111 = 4095
-    # 4095 + 1 = 4096 = 2^12 (power of 2) ✓
     inverted_mask = (~mask_int) & 0xFFFFFFFF
     return (inverted_mask & (inverted_mask + 1)) == 0
 
+def cidr_to_subnet_mask(prefix):
+    if prefix < 0 or prefix > 32:
+        return None
+    
+    mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
+    octets = [(mask_int >> (24 - i * 8)) & 0xFF for i in range(4)]
+    return '.'.join(map(str, octets))
+
+def extract_ip_from_cidr(ip):
+    return ip.split('/')[0] if '/' in ip else ip
+
 def detect_ip_class(ip):
-    """Detects the IP address class"""
-    first_octet = int(ip.split('.')[0])
+    clean_ip = extract_ip_from_cidr(ip)
+    first_octet = int(clean_ip.split('.')[0])
     
     if 1 <= first_octet <= 126:
         return informationMessages["class_a_detected"]
