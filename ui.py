@@ -1,5 +1,15 @@
 import customtkinter as ctk
-from logic import testIP, detect_ip_class, cidr_to_subnet_mask, extract_ip_from_cidr
+from logic import (
+    testIP,
+    detect_ip_class,
+    cidr_to_subnet_mask,
+    extract_ip_from_cidr,
+    get_network_address,
+    get_broadcast_address,
+    ip_in_network,
+    get_ip_range,
+)
+from logic import parse_membership_inputs
 import threading
 
 ctk.set_appearance_mode("dark")
@@ -31,19 +41,20 @@ class App(ctk.CTk):
         
     def create_widgets(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        # Styles centralisés pour harmonisation
+        self.primary_color = ("#3b82f6", "#2563eb")
+        self.primary_hover = ("#1d4ed8", "#1e40af")
+        self.entry_bg = ("#f8fafc", "#2d2d2d")
+        self.entry_border = ("#d1d5db", "#4a4a4a")
+        self.placeholder_color = ("#9ca3af", "#6b7280")
+        self.entry_h = 45
+        self.entry_radius = 12
         
         self.title_label = ctk.CTkLabel(
             self.main_frame,
             text="Network Managers",
             font=ctk.CTkFont(family="Segoe UI", size=28, weight="bold"),
             text_color=("#1e293b", "#f1f5f9")
-        )
-        
-        self.subtitle_label = ctk.CTkLabel(
-            self.main_frame,
-            text="Validation d'adresses IP et masques de sous-réseau",
-            font=ctk.CTkFont(family="Segoe UI", size=14),
-            text_color=("#64748b", "#94a3b8")
         )
         
         self.input_card = ctk.CTkFrame(
@@ -53,36 +64,51 @@ class App(ctk.CTk):
             border_width=2,
             border_color=("#e2e8f0", "#404040")
         )
-        
+
         self.input_title = ctk.CTkLabel(
             self.input_card,
             text="📝 Saisie des données",
             font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
             text_color=("#1e293b", "#f1f5f9")
         )
-        
+
+        self.tabview = ctk.CTkTabview(self.input_card, width=580, height=220)
+        self.tabview.add("Calcul réseau")
+        self.tabview.add("Vérification d'appartenance")
+
+        ip_tab = self.tabview.tab("Calcul réseau")
+        params_tab = self.tabview.tab("Vérification d'appartenance")
+
+        # colorer la zone des onglets pour la rendre harmonisée avec le bouton Valider
+        try:
+            ip_tab.configure(fg_color=self.entry_bg)
+            params_tab.configure(fg_color=self.entry_bg)
+        except Exception:
+            pass
+
+        # Widgets pour l'onglet IP
         self.ip_label = ctk.CTkLabel(
-            self.input_card,
+            ip_tab,
             text="🌍 Adresse IP",
             font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             text_color=("#374151", "#d1d5db"),
             anchor="w"
         )
-        
+
         self.ip_entry = ctk.CTkEntry(
-            self.input_card,
+            ip_tab,
             placeholder_text="Exemple: 192.168.1.1 (ou 192.168.1.0/24 en mode Classless)",
             font=ctk.CTkFont(family="Segoe UI", size=13),
-            height=45,
-            corner_radius=12,
+            height=self.entry_h,
+            corner_radius=self.entry_radius,
             border_width=2,
-            fg_color=("#f8fafc", "#2d2d2d"),
-            border_color=("#d1d5db", "#4a4a4a"),
-            placeholder_text_color=("#9ca3af", "#6b7280")
+            fg_color=self.entry_bg,
+            border_color=self.entry_border,
+            placeholder_text_color=self.placeholder_color
         )
-        
+
         self.classful_label = ctk.CTkLabel(
-            self.input_card,
+            ip_tab,
             text="Classless",
             font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             text_color=("#374151", "#d1d5db"),
@@ -90,7 +116,7 @@ class App(ctk.CTk):
         )
 
         self.classful_entry = ctk.CTkSwitch(
-            self.input_card, 
+            ip_tab,
             text="",
             command=self.classless_toggle,
             onvalue="on",
@@ -98,39 +124,109 @@ class App(ctk.CTk):
         )
 
         self.subnet_label = ctk.CTkLabel(
-            self.input_card,
+            ip_tab,
             text="🔒 Masque de sous-réseau",
             font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             text_color=("#374151", "#d1d5db"),
             anchor="w"
         )
-        
+
         self.subnet_entry = ctk.CTkEntry(
-            self.input_card,
+            ip_tab,
             placeholder_text="Exemple: 255.255.255.0",
             font=ctk.CTkFont(family="Segoe UI", size=13),
-            height=45,
-            corner_radius=12,
+            height=self.entry_h,
+            corner_radius=self.entry_radius,
             border_width=2,
-            fg_color=("#f8fafc", "#2d2d2d"),
-            border_color=("#d1d5db", "#4a4a4a"),
-            placeholder_text_color=("#9ca3af", "#6b7280")
+            fg_color=self.entry_bg,
+            border_color=self.entry_border,
+            placeholder_text_color=self.placeholder_color
         )
+
+        # --- Widgets pour l'onglet Appartenance Réseau ---
+        # Cet onglet reprend la logique de point2.py : vérification d'appartenance,
+        # calcul d'adresse réseau, broadcast et plage d'hôtes.
+        self.membership_ip_label = ctk.CTkLabel(
+            params_tab,
+            text="📌 IP à vérifier",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=("#374151", "#d1d5db"),
+            anchor="w"
+        )
+
+        self.membership_ip_entry = ctk.CTkEntry(
+            params_tab,
+            placeholder_text="Ex: 192.168.1.10",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=self.entry_h,
+            corner_radius=self.entry_radius,
+            border_width=2,
+            fg_color=self.entry_bg,
+            border_color=self.entry_border,
+            placeholder_text_color=self.placeholder_color
+        )
+
+        self.membership_network_label = ctk.CTkLabel(
+            params_tab,
+            text="🌐 Adresse réseau",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=("#374151", "#d1d5db"),
+            anchor="w"
+        )
+
+        self.membership_network_entry = ctk.CTkEntry(
+            params_tab,
+            placeholder_text="Ex: 192.168.1.0",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=self.entry_h,
+            corner_radius=self.entry_radius,
+            border_width=2,
+            fg_color=self.entry_bg,
+            border_color=self.entry_border,
+            placeholder_text_color=self.placeholder_color
+        )
+
+        self.membership_mask_label = ctk.CTkLabel(
+            params_tab,
+            text="🔒 Masque de sous-réseau",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=("#374151", "#d1d5db"),
+            anchor="w"
+        )
+
+        self.membership_mask_entry = ctk.CTkEntry(
+            params_tab,
+            placeholder_text="Ex: 255.255.255.0",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=self.entry_h,
+            corner_radius=self.entry_radius,
+            border_width=2,
+            fg_color=self.entry_bg,
+            border_color=self.entry_border,
+            placeholder_text_color=self.placeholder_color
+        )
+
+        # membership_check_button removed; main 'Valider' button will handle membership checks
         
         self.button_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         
         self.validate_button = ctk.CTkButton(
             self.button_frame,
             text="🔍 Valider",
-            command=self.display,
+            command=self.validate_action,
             font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             height=45,
             width=140,
             corner_radius=12,
-            fg_color=("#3b82f6", "#2563eb"),
-            hover_color=("#1d4ed8", "#1e40af"),
+            fg_color=self.primary_color,
+            hover_color=self.primary_hover,
             text_color="white"
         )
+        # Stocker la couleur d'origine pour restauration sûre
+        try:
+            self.validate_button._original_fg = self.validate_button.cget('fg_color')
+        except Exception:
+            self.validate_button._original_fg = self.primary_color
         
         self.clear_button = ctk.CTkButton(
             self.button_frame,
@@ -230,9 +326,7 @@ class App(ctk.CTk):
             self.info_card,
             text="• Mode Classful: Format IP xxx.xxx.xxx.xxx + masque séparé\n"
                  "• Mode Classless: Format CIDR xxx.xxx.xxx.xxx/préfixe (ex: 192.168.1.0/24)\n"
-                 "• Le préfixe CIDR doit être entre 0 et 32\n"
-                 "• Le masque doit avoir des bits consécutifs (pas de trous)\n"
-                 "• Les adresses privées et spéciales sont détectées automatiquement",
+                 "• Le masque doit avoir des bits consécutifs (pas de trous)\n",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=("#64748b", "#94a3b8"),
             anchor="w",
@@ -254,24 +348,47 @@ class App(ctk.CTk):
         self.subnet_entry.bind("<FocusIn>", lambda e: self.on_focus_in(self.subnet_entry))
         self.ip_entry.bind("<FocusOut>", lambda e: self.on_focus_out(self.ip_entry))
         self.subnet_entry.bind("<FocusOut>", lambda e: self.on_focus_out(self.subnet_entry))
+        # lier aussi les champs du 2ème onglet pour comportements cohérents
+        try:
+            self.membership_ip_entry.bind("<KeyRelease>", self.on_entry_change)
+            self.membership_network_entry.bind("<KeyRelease>", self.on_entry_change)
+            self.membership_mask_entry.bind("<KeyRelease>", self.on_entry_change)
+            self.membership_ip_entry.bind("<FocusIn>", lambda e: self.on_focus_in(self.membership_ip_entry))
+            self.membership_network_entry.bind("<FocusIn>", lambda e: self.on_focus_in(self.membership_network_entry))
+            self.membership_mask_entry.bind("<FocusIn>", lambda e: self.on_focus_in(self.membership_mask_entry))
+            self.membership_ip_entry.bind("<FocusOut>", lambda e: self.on_focus_out(self.membership_ip_entry))
+            self.membership_network_entry.bind("<FocusOut>", lambda e: self.on_focus_out(self.membership_network_entry))
+            self.membership_mask_entry.bind("<FocusOut>", lambda e: self.on_focus_out(self.membership_mask_entry))
+        except Exception:
+            pass
         
     def setup_layout(self):
         self.main_frame.pack(fill="both", expand=True, padx=30, pady=20)
         
         self.title_label.pack(pady=(0, 5))
-        self.subtitle_label.pack(pady=(0, 15))
         
         self.input_card.pack(fill="x", pady=(0, 20))
-        self.input_title.pack(pady=(20, 20))
-        
-        self.ip_label.pack(anchor="w", padx=25, pady=(0, 5))
-        self.ip_entry.pack(fill="x", padx=25, pady=(0, 20))
-        
-        self.classful_label.pack(anchor="w", padx=25, pady=(0, 0))
-        self.classful_entry.pack(anchor="w", padx=25, pady=(0, 20))
-        
-        self.subnet_label.pack(anchor="w", padx=25, pady=(0, 8))
-        self.subnet_entry.pack(fill="x", padx=25, pady=(0, 25))
+        self.input_title.pack(pady=(20, 12))
+
+        # Affiche le sélecteur d'onglets (IP / Paramètres)
+        self.tabview.pack(fill="x", padx=20, pady=(0, 10))
+
+        # Widgets de l'onglet IP
+        self.ip_label.pack(anchor="w", padx=12, pady=(8, 5))
+        self.ip_entry.pack(fill="x", padx=12, pady=(0, 10))
+        self.classful_label.pack(anchor="w", padx=12, pady=(0, 0))
+        self.classful_entry.pack(anchor="w", padx=12, pady=(0, 10))
+        self.subnet_label.pack(anchor="w", padx=12, pady=(0, 5))
+        self.subnet_entry.pack(fill="x", padx=12, pady=(0, 12))
+
+        # Widgets de l'onglet Appartenance Réseau
+        self.membership_ip_label.pack(anchor="w", padx=12, pady=(6, 4))
+        self.membership_ip_entry.pack(fill="x", padx=12, pady=(0, 8))
+        self.membership_network_label.pack(anchor="w", padx=12, pady=(0, 4))
+        self.membership_network_entry.pack(fill="x", padx=12, pady=(0, 8))
+        self.membership_mask_label.pack(anchor="w", padx=12, pady=(0, 4))
+        self.membership_mask_entry.pack(fill="x", padx=12, pady=(0, 10))
+        # membership_check_button removed; main 'Valider' button will handle membership checks
         
         self.button_frame.pack(pady=5)
         self.validate_button.pack(side="left", padx=(0, 15))
@@ -320,17 +437,50 @@ class App(ctk.CTk):
         update_progress(0)
         
     def clear_fields(self):
-        self.ip_entry.delete(0, "end")
-        self.subnet_entry.delete(0, "end")
+        # Clear main IP fields
+        try:
+            self.ip_entry.delete(0, "end")
+        except Exception:
+            pass
+        try:
+            self.subnet_entry.delete(0, "end")
+        except Exception:
+            pass
+
+        # Clear membership tab fields as well
+        try:
+            self.membership_ip_entry.delete(0, "end")
+        except Exception:
+            pass
+        try:
+            self.membership_network_entry.delete(0, "end")
+        except Exception:
+            pass
+        try:
+            self.membership_mask_entry.delete(0, "end")
+        except Exception:
+            pass
+
         self.clear_results()
-        self.ip_entry.focus()
-        
+
+        # Focus main IP entry by default
+        try:
+            self.ip_entry.focus()
+        except Exception:
+            try:
+                self.membership_ip_entry.focus()
+            except Exception:
+                pass
+
         self.animate_button_press(self.clear_button)
         
     def animate_button_press(self, button):
-        original_fg = button.cget('fg_color')
-        button.configure(fg_color=("#e2e8f0", "#4b5563"))
-        self.after(100, lambda: button.configure(fg_color=original_fg))
+        # Désactiver brièvement le bouton pour feedback tactile sans changer la couleur
+        try:
+            button.configure(state="disabled")
+            self.after(100, lambda: button.configure(state="normal"))
+        except Exception:
+            pass
         
     def animate_result_appearance(self):
         original_border = self.results_card.cget('border_color')
@@ -451,3 +601,80 @@ class App(ctk.CTk):
             text_color=("#374151", "#d1d5db") if not self.isClassful else ("#7f7f7f", "#5a5a5a"),
         )
         self.clear_results()
+
+    def apply_params(self):
+        """Applique les paramètres saisis dans l'onglet 'Paramètres' et affiche un résumé."""
+        # Remplacée par check_membership; garder compatibilité si appelé par erreur
+        self.success_label.configure(text="(Fonction remplacée : utilisez 'Vérifier appartenance')")
+        self.animate_result_appearance()
+
+    def check_membership(self):
+        """Utilise les fonctions de point2.py pour vérifier l'appartenance réseau et afficher les résultats."""
+        ip = self.membership_ip_entry.get().strip() or self.ip_entry.get().strip()
+        network = self.membership_network_entry.get().strip()
+        mask = self.membership_mask_entry.get().strip()
+
+        # Réafficher la carte de résultats (elle avait été masquée avant l'animation)
+        try:
+            self.results_card.pack(fill="x", pady=(0, 20), before=self.info_card)
+        except Exception:
+            pass
+
+        # Clear previous results
+        self.clear_results()
+
+        # Utiliser le parser/validateur centralisé dans logic.py
+        ip_clean, network_clean, mask_dotted, err = parse_membership_inputs(ip, network, mask)
+        if err:
+            self.error_label.configure(text=f"❌ {err}")
+            self.animate_result_appearance()
+            return
+
+        try:
+            belongs = False
+            if ip_clean and network_clean and mask_dotted:
+                belongs = ip_in_network(ip_clean, network_clean, mask_dotted)
+
+            if belongs:
+                self.success_label.configure(text=f"✅ {ip_clean} appartient au réseau {network_clean}")
+            else:
+                self.error_label.configure(text=f"❌ {ip_clean} n'appartient pas au réseau {network_clean}")
+
+            # Toujours afficher l'adresse réseau calculée et broadcast/plage si possible
+            if ip_clean and mask_dotted:
+                net_addr = get_network_address(ip_clean, mask_dotted)
+                bcast = get_broadcast_address(ip_clean, mask_dotted)
+                start, end = get_ip_range(net_addr, mask_dotted)
+
+                self.network_label.configure(text=f"🌐 Adresse réseau: {net_addr}")
+                self.broadcast_label.configure(text=f"📡 Broadcast: {bcast}")
+                self.hosts_label.configure(text=f"👥 Plage hôtes: {start} - {end}")
+
+            self.animate_result_appearance()
+
+        except Exception as e:
+            self.error_label.configure(text=f"❌ Erreur: {e}")
+            self.animate_result_appearance()
+
+    def validate_action(self):
+        """Dispatch: si l'onglet actif est 'Vérification d'appartenance' => check_membership, sinon => display."""
+        # animate the validate button regardless of which action runs
+        try:
+            self.animate_button_press(self.validate_button)
+        except Exception:
+            pass
+
+        try:
+            current = self.tabview.get()
+        except Exception:
+            current = None
+
+        # If user is on the 'Vérification d'appartenance' tab, run membership check; otherwise run regular validation
+        if current == "Vérification d'appartenance":
+            try:
+                self.results_card.pack_forget()
+            except Exception:
+                pass
+            self.animate_progress(callback=self.check_membership)
+        else:
+            self.display()
