@@ -17,7 +17,6 @@ class LoginApp(ctk.CTk):
     def setup_window(self):
         self.title("Network Manager - Authentification")
         self.geometry("500x450")
-        self.resizable(False, False)
         self.configure(fg_color=("#f8fafc", "#1a1a1a"))
         
     def setup_database(self):
